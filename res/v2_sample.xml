@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2021/06/08/eD/DefinicjeTypy/">
+    <Naglowek>
+        <KodFormularza kodSystemowy="JPK_V7M (2)">JPK_VAT</KodFormularza>
+        <WariantFormularza>2</WariantFormularza>
+    </Naglowek>
+    <Deklaracja>
+        <Naglowek>
+            <KodFormularzaDekl kodSystemowy="VAT-7 (22)">VAT-7</KodFormularzaDekl>
+            <WariantFormularzaDekl>22</WariantFormularzaDekl>
+        </Naglowek>
+        <PozycjeSzczegolowe>
+            <P_38>1000.00</P_38>
+        </PozycjeSzczegolowe>
+    </Deklaracja>
+    <Ewidencja>
+        <SprzedazWiersz>
+            <DataWystawienia>2026-03-24</DataWystawienia>
+            <DataSprzedazy>2026-03-24</DataSprzedazy>
+            <TypDokumentu>RO</TypDokumentu>
+            <GTU_01>1</GTU_01>
+        </SprzedazWiersz>
+        <ZakupWiersz>
+            <DataZakupu>2026-03-24</DataZakupu>
+            <DokumentZakupu>WEW</DokumentZakupu>
+        </ZakupWiersz>
+    </Ewidencja>
+</JPK>

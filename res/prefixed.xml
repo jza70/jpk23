@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jpk:JPK xmlns:jpk="http://crd.gov.pl/wzor/2021/12/27/11148/"
+    xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/">
+    <jpk:Naglowek>
+        <jpk:KodFormularza kodSystemowy="JPK_V7M (2)" wersjaSchemy="1-0E">JPK_V7M</jpk:KodFormularza>
+        <jpk:WariantFormularza>2</jpk:WariantFormularza>
+        <jpk:DataWytworzeniaJPK>2023-01-01T12:00:00Z</jpk:DataWytworzeniaJPK>
+        <jpk:NazwaSystemu>Test</jpk:NazwaSystemu>
+    </jpk:Naglowek>
+    <jpk:Ewidencja>
+        <jpk:SprzedazWiersz>
+            <jpk:LpSprzedazy>1</jpk:LpSprzedazy>
+            <jpk:DataWystawienia>2023-01-01</jpk:DataWystawienia>
+            <jpk:TypDokumentu>RO</jpk:TypDokumentu>
+            <jpk:K_10>100.00</jpk:K_10>
+        </jpk:SprzedazWiersz>
+    </jpk:Ewidencja>
+</jpk:JPK>
