@@ -23,7 +23,27 @@ cd jpk23
 cargo build --release
 ```
 
-The executable will be generated at `target/release/jpk23.exe`.
+The executable for your current platform will be generated at `target/release/jpk23`.
+
+## Cross-Platform Builds
+
+### Automated (GitHub Actions)
+
+This project includes a GitHub Actions workflow to automatically build and release binaries for Windows, Linux, and macOS (x86_64 and ARM64).
+
+To trigger a build:
+
+1. Push a version tag: `git tag v1.0.1 && git push origin v1.0.1`
+2. The binaries will be automatically built and attached to a new GitHub Release.
+
+### Local Cross-Compilation (Linux)
+
+To build Linux binaries from Windows/macOS, it is recommended to use [cross](https://github.com/cross-rs/cross):
+
+```sh
+cargo install cross
+cross build --release --target x86_64-unknown-linux-gnu
+```
 
 ## Usage
 
@@ -105,10 +125,10 @@ With --summary or -s flag, the tool prints a summary of the conversion at the en
    Max VAT (Row):                     (1)         283 950.62
    Min VAT (Row):                     (2)             400.00
    Rate Breakdown:                Net               VAT
-       23%                     1 234 567.89       283 950.62
-        8%                         5 000.00           400.00
-        5%                             0.00             0.00
-     Other                             0.00             0.00
+       23%                     1 234 567.89         283 950.62
+        8%                         5 000.00             400.00
+        5%                             0.00               0.00
+     Other                             0.00               0.00
 -------------------------------------------------------------
  PURCHASES (PLN):
    Records:                                                1
@@ -129,6 +149,7 @@ With --summary or -s flag, the tool prints a summary of the conversion at the en
 - **Quiet Mode:** Added `-q, --quiet` flag to suppress XML output (useful for validation/summary).
 - **Clustering Support:** Improved CLI experience to allow joining single-letter options (e.g. `-qsi`).
 - **Robust Flags:** Standardized boolean flags to be idempotent and allow multiple occurrences.
+- **Automation:** Added GitHub Actions for automated cross-platform builds (Windows, Linux, macOS).
 
 ### [1.0.0] - 2026-03-24
 
