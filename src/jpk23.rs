@@ -89,11 +89,16 @@ impl ParserState {
     }
 }
 
-pub fn process_jpk<R: BufRead, W: Write>(input: R, output: &mut W, target_namespace: Option<String>, kod_urzedu: Option<String>, explicit_variant: FormVariant) -> Result<()> {
+pub fn process_jpk<R: BufRead, W: Write>(input: R, output: &mut W, target_namespace: Option<String>, kod_urzedu: Option<String>, explicit_variant: FormVariant, indent: bool) -> Result<()> {
     let mut reader = Reader::from_reader(input);
-    reader.trim_text(false);
+    reader.trim_text(indent);
     
-    let mut writer = Writer::new(output);
+    let mut writer = if indent {
+        Writer::new_with_indent(output, b' ', 2)
+    } else {
+        Writer::new(output)
+    };
+    
     let mut buf = Vec::new();
     let mut state = ParserState::new(target_namespace, kod_urzedu, explicit_variant);
 
@@ -972,7 +977,7 @@ fn process_ctrl_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>) ->
             
             if !old_val.is_empty() && old_val != total_str && old_val != format!("{:.1}", calculated_total) {
                 let msg = format!("Warning: Control total discrepancy in SprzedazCtrl/PodatekNalezny is {} (calculated {})", old_val, total_str);
-                eprintln!("{}", msg);
+                eprintln!("\x1b[33m{}\x1b[0m", msg);
                 writer.write_event(Event::Comment(BytesText::new(&format!(" {} ", msg))))?;
                 final_val = old_val;
             }
@@ -1003,7 +1008,7 @@ fn process_ctrl_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>) ->
             
             if !old_val.is_empty() && old_val != total_str && old_val != format!("{:.1}", calculated_total) {
                 let msg = format!("Warning: Control total discrepancy in ZakupCtrl/PodatekNaliczony is {} (calculated {})", old_val, total_str);
-                eprintln!("{}", msg);
+                eprintln!("\x1b[33m{}\x1b[0m", msg);
                 writer.write_event(Event::Comment(BytesText::new(&format!(" {} ", msg))))?;
                 final_val = old_val;
             }

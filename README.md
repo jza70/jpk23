@@ -37,7 +37,7 @@ jpk23 --in res/v2_sample.xml --out output_v3.xml -u 1438
 - `-m, --v7m`: Force output variant to JPK_V7M (Monthly).
 - `-k, --v7k`: Force output variant to JPK_V7K (Quarterly).
 - `-n, --namespace [PREFIX]`: Set a custom namespace prefix (e.g. `jpk`). Use without value to strip prefixes entirely.
-- `-f, --force`: Force overwrite the output file without prompting.
+- `-p, --pretty`: Format the output XML with indentation (pretty print).
 - `-h, --help`: Display help information.
 - `-v, --version`: Print version and license info.
 

@@ -26,9 +26,9 @@ struct Args {
     #[arg(short = 'n', long = "namespace", value_name = "PREFIX", num_args = 0..=1, default_missing_value = "")]
     namespace: Option<String>,
 
-    /// Force overwrite the output file without asking
-    #[arg(short = 'f', long = "force")]
-    force: bool,
+    /// Format the output XML with indentation (aliased to -f).
+    #[arg(short = 'f', long = "format")]
+    format: bool,
 
     /// Set the KodUrzedu (Tax Office Code) for the Naglowek (mandatory in V3).
     #[arg(short = 'u', long = "urzad", value_name = "CODE")]
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
     let mut output_writer: Box<dyn Write> = match args.output.as_deref() {
         Some(path_str) if !path_str.is_empty() => {
             let path = std::path::Path::new(path_str);
-            if path.exists() && !args.force {
+            if path.exists() {
                 eprint!("File {:?} already exists. Overwrite? [y/N]: ", path);
                 io::stderr().flush()?;
                 let mut buf = String::new();
@@ -94,5 +94,5 @@ fn main() -> Result<()> {
         jpk23::FormVariant::Unknown
     };
 
-    jpk23::process_jpk(input_reader, &mut output_writer, args.namespace.clone(), args.urzad.clone(), explicit_variant)
+    jpk23::process_jpk(input_reader, &mut output_writer, args.namespace.clone(), args.urzad.clone(), explicit_variant, args.format)
 }
