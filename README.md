@@ -1,5 +1,11 @@
 # JPK23 - JPK_V7(1)/JPK_V7(2) to JPK_V7(3) Converter
 
+[![CI](https://github.com/jza70/jpk23/actions/workflows/ci.yml/badge.svg)](https://github.com/jza70/jpk23/actions/workflows/ci.yml)
+[![Release](https://github.com/jza70/jpk23/actions/workflows/release.yml/badge.svg)](https://github.com/jza70/jpk23/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust: 1.70+](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/jza70/jpk23/graphs/commit-activity)
+
 A blazing-fast, stream-based command-line tool written in Rust to convert legacy version 1 (`JPK_VAT(3)` schema 1-1) and version 2 (`JPK_V7M(2)` / `JPK_V7K(2)`) XML files to the mandatory output JPK_V7(3) format required by the Polish Ministry of Finance (KAS) from February 2026. It also supports native JPK_V7(3) processing for pretty-printing, variant switching, and generating conversion summaries.
 
 ## Features
@@ -125,10 +131,10 @@ With --summary or -s flag, the tool prints a summary of the conversion at the en
    Max VAT (Row):                     (1)         283 950.62
    Min VAT (Row):                     (2)             400.00
    Rate Breakdown:                Net               VAT
-       23%                     1 234 567.89         283 950.62
-        8%                         5 000.00             400.00
-        5%                             0.00               0.00
-     Other                             0.00               0.00
+       23%                     1 234 567.89       283 950.62
+        8%                         5 000.00           400.00
+        5%                             0.00             0.00
+     Other                             0.00             0.00
 -------------------------------------------------------------
  PURCHASES (PLN):
    Records:                                                1
