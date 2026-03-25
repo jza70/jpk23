@@ -33,7 +33,7 @@ fn format_currency(value: f64) -> String {
 #[command(author, about, long_about = None, disable_version_flag = true)]
 struct Args {
     /// Print version
-    #[arg(short = 'v', long = "version")]
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::SetTrue, overrides_with = "version")]
     version: bool,
     /// Input JPK_V7 XML file (supports Version 1 `JPK_VAT(3)` and Version 2 `JPK_V7M(2)/JPK_V7K(2)`). If missing, reads from standard input.
     #[arg(short = 'i', long = "in", value_name = "FILE", num_args = 0..=1, default_missing_value = "")]
@@ -48,11 +48,15 @@ struct Args {
     namespace: Option<String>,
 
     /// Pretty print XML output (indentation)
-    #[arg(short = 'p', long)]
+    #[arg(short = 'p', long, action = clap::ArgAction::SetTrue, overrides_with = "pretty")]
     pretty: bool,
 
+    /// Suppress XML output (useful for pure validation or summary)
+    #[arg(short = 'q', long, action = clap::ArgAction::SetTrue, overrides_with = "quiet")]
+    quiet: bool,
+
     /// Print summary at the end
-    #[arg(short = 's', long)]
+    #[arg(short = 's', long, action = clap::ArgAction::SetTrue, overrides_with = "summary")]
     summary: bool,
 
     /// Set the KodUrzedu (Tax Office Code) for the Naglowek (mandatory in V3).
@@ -60,11 +64,11 @@ struct Args {
     urzad: Option<String>,
 
     /// Force output variant to JPK_V7M (Monthly). Default if undetermined.
-    #[arg(short = 'm', long = "v7m")]
+    #[arg(short = 'm', long = "v7m", action = clap::ArgAction::SetTrue, overrides_with = "v7m")]
     v7m: bool,
 
     /// Force output variant to JPK_V7K (Quarterly).
-    #[arg(short = 'k', long = "v7k")]
+    #[arg(short = 'k', long = "v7k", action = clap::ArgAction::SetTrue, overrides_with = "v7k")]
     v7k: bool,
 }
 
@@ -92,23 +96,27 @@ fn main() -> Result<()> {
         _ => Box::new(BufReader::new(io::stdin())),
     };
 
-    let output_stream: Box<dyn Write> = match args.output.as_deref() {
-        Some(path_str) if !path_str.is_empty() => {
-            let path = std::path::Path::new(path_str);
-            if path.exists() {
-                eprint!("File {:?} already exists. Overwrite? [y/N]: ", path);
-                io::stderr().flush()?;
-                let mut buf = String::new();
-                io::stdin().read_line(&mut buf)?;
-                if !buf.trim().eq_ignore_ascii_case("y") {
-                    eprintln!("Operation cancelled.");
-                    std::process::exit(0);
+    let output_stream: Box<dyn Write> = if args.quiet {
+        Box::new(io::sink())
+    } else {
+        match args.output.as_deref() {
+            Some(path_str) if !path_str.is_empty() => {
+                let path = std::path::Path::new(path_str);
+                if path.exists() {
+                    eprint!("File {:?} already exists. Overwrite? [y/N]: ", path);
+                    io::stderr().flush()?;
+                    let mut buf = String::new();
+                    io::stdin().read_line(&mut buf)?;
+                    if !buf.trim().eq_ignore_ascii_case("y") {
+                        eprintln!("Operation cancelled.");
+                        std::process::exit(0);
+                    }
                 }
+                let file = File::create(path).with_context(|| format!("Failed to create {:?}", path))?;
+                Box::new(file)
             }
-            let file = File::create(path).with_context(|| format!("Failed to create {:?}", path))?;
-            Box::new(file)
+            _ => Box::new(io::stdout()),
         }
-        _ => Box::new(io::stdout()),
     };
 
     let explicit_variant = if args.v7k {

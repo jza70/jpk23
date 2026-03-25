@@ -15,6 +15,7 @@ pub enum FormVersion {
     Unknown,
     V1,
     V2,
+    V3,
 }
 
 #[derive(Debug)]
@@ -340,11 +341,17 @@ fn handle_start_event<W: Write>(
                     if state.variant == FormVariant::Unknown { state.variant = FormVariant::K; }
                 } else if val == b"http://jpk.mf.gov.pl/wzor/2017/11/13/1113/" {
                     state.version = FormVersion::V1;
+                } else if val == b"http://crd.gov.pl/wzor/2025/12/19/14090/" {
+                    state.version = FormVersion::V3;
+                    if state.variant == FormVariant::Unknown { state.variant = FormVariant::M; }
+                } else if val == b"http://crd.gov.pl/wzor/2025/12/19/14089/" {
+                    state.version = FormVersion::V3;
+                    if state.variant == FormVariant::Unknown { state.variant = FormVariant::K; }
                 }
             }
         }
         if state.version == FormVersion::Unknown {
-            bail!("Error: Input file must be of JPK_V7 (1 or 2) type root namespace.");
+            bail!("Error: Unrecognized format or namespace. Please provide a supported JPK_V7 XML file (V1, V2 or V3).");
         }
         
         // If still unknown (V1 or weird V2), default to M for now (will be updated in Naglowek if V1)
@@ -636,6 +643,8 @@ fn process_naglowek_buffer<W: Write>(
     let mut data_od = String::new();
     let mut data_do = String::new();
     let mut input_kod_urzedu = String::new();
+    let mut input_rok = String::new();
+    let mut input_miesiac = String::new();
     
     for (name, block) in &children {
         if name == "KodFormularza" || name == "KodFormularzaDekl" {
@@ -661,6 +670,16 @@ fn process_naglowek_buffer<W: Write>(
         if name == "KodUrzedu" {
             for ev in block {
                 if let Event::Text(txt) = ev { input_kod_urzedu = String::from_utf8_lossy(txt).trim().to_string(); }
+            }
+        }
+        if name == "Rok" {
+            for ev in block {
+                if let Event::Text(txt) = ev { input_rok = String::from_utf8_lossy(txt).trim().to_string(); }
+            }
+        }
+        if name == "Miesiac" {
+            for ev in block {
+                if let Event::Text(txt) = ev { input_miesiac = String::from_utf8_lossy(txt).trim().to_string(); }
             }
         }
     }
@@ -718,25 +737,31 @@ fn process_naglowek_buffer<W: Write>(
             } else if state.version == FormVersion::V1 {
                 bail!("Error: KodUrzedu is mandatory for conversion to JPK_V7(3). Please provide it using -u or --urzad flag.");
             }
-        } else if expected == "Rok" && data_od.len() >= 4 {
-            let rok_val = &data_od[0..4];
-            let rok_num: i32 = rok_val.parse().unwrap_or(0);
-            if rok_num < 2026 {
-                // Technically V3 is for 2026 onwards, but we'll allow it if forced? 
-                // XSD says minInclusive 2026.
+        } else if expected == "Rok" {
+            let r_val = if !data_od.is_empty() { &data_od[0..4] } else { &input_rok };
+            if !r_val.is_empty() {
+                let r_num: i32 = r_val.parse().unwrap_or(0);
+                if r_num > 0 {
+                    let rok_tag = build_tag(active_prefix, "Rok");
+                    writer.write_event(Event::Start(BytesStart::new(&rok_tag)))?;
+                    writer.write_event(Event::Text(BytesText::new(r_val)))?;
+                    writer.write_event(Event::End(BytesEnd::new(&rok_tag)))?;
+                    written_names.insert(expected);
+                }
             }
-            let rok_tag = build_tag(active_prefix, "Rok");
-            writer.write_event(Event::Start(BytesStart::new(&rok_tag)))?;
-            writer.write_event(Event::Text(BytesText::new(rok_val)))?;
-            writer.write_event(Event::End(BytesEnd::new(&rok_tag)))?;
-            written_names.insert(expected);
-        } else if expected == "Miesiac" && data_od.len() >= 7 {
-            let mc_val = data_od[5..7].trim_start_matches('0');
-            let mc_tag = build_tag(active_prefix, "Miesiac");
-            writer.write_event(Event::Start(BytesStart::new(&mc_tag)))?;
-            writer.write_event(Event::Text(BytesText::new(if mc_val.is_empty() { "0" } else { mc_val })))?;
-            writer.write_event(Event::End(BytesEnd::new(&mc_tag)))?;
-            written_names.insert(expected);
+        } else if expected == "Miesiac" {
+            let m_val = if !data_od.is_empty() { 
+                data_od[5..7].trim_start_matches('0').to_string() 
+            } else { 
+                input_miesiac.trim_start_matches('0').to_string() 
+            };
+            if !m_val.is_empty() {
+                let mc_tag = build_tag(active_prefix, "Miesiac");
+                writer.write_event(Event::Start(BytesStart::new(&mc_tag)))?;
+                writer.write_event(Event::Text(BytesText::new(if m_val.is_empty() { "0" } else { &m_val })))?;
+                writer.write_event(Event::End(BytesEnd::new(&mc_tag)))?;
+                written_names.insert(expected);
+            }
         }
     }
 
