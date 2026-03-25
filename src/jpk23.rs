@@ -17,6 +17,48 @@ pub enum FormVersion {
     V2,
 }
 
+#[derive(Debug)]
+pub struct RateBreakdown {
+    pub base_5: f64,
+    pub vat_5: f64,
+    pub base_8: f64,
+    pub vat_8: f64,
+    pub base_23: f64,
+    pub vat_23: f64,
+    pub base_other: f64,
+    pub vat_other: f64,
+}
+
+impl RateBreakdown {
+    pub fn new() -> Self {
+        Self {
+            base_5: 0.0, vat_5: 0.0,
+            base_8: 0.0, vat_8: 0.0,
+            base_23: 0.0, vat_23: 0.0,
+            base_other: 0.0, vat_other: 0.0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct JpkStats {
+    pub original_version: FormVersion,
+    pub taxpayer_nip: Option<String>,
+    
+    pub sales_count: usize,
+    pub total_sales_base: f64,
+    pub total_sales_vat: f64,
+    pub max_sales_vat: Option<(f64, usize)>,
+    pub min_sales_vat: Option<(f64, usize)>,
+    pub breakdown: RateBreakdown,
+    
+    pub purchase_count: usize,
+    pub total_purchase_base: f64,
+    pub total_purchase_vat: f64,
+    pub max_purchase_vat: Option<(f64, usize)>,
+    pub min_purchase_vat: Option<(f64, usize)>,
+}
+
 struct ParserState {
     version: FormVersion,
     variant: FormVariant,
@@ -47,9 +89,24 @@ struct ParserState {
     
     sum_k41: f64, sum_k43: f64, sum_k44: f64, sum_k45: f64, sum_k46: f64, sum_k47: f64,
     
+    taxpayer_nip: Option<String>,
+    
     count_sales: usize,
     count_purchase: usize,
     
+    total_sales_base: f64,
+    total_sales_vat: f64,
+    total_purchase_base: f64,
+    total_purchase_vat: f64,
+    
+    breakdown: RateBreakdown,
+    
+    max_sales_vat: Option<(f64, usize)>,
+    min_sales_vat: Option<(f64, usize)>,
+    max_purchase_vat: Option<(f64, usize)>,
+    min_purchase_vat: Option<(f64, usize)>,
+    
+    // Helper to distinguish if we are in a control section
     inside_ctrl: bool,
     ctrl_buffer: Vec<Event<'static>>,
 }
@@ -62,6 +119,7 @@ impl ParserState {
             has_checked_root: false,
             root_prefix: Vec::new(),
             target_prefix: target_namespace.map(|s| s.into_bytes()),
+            
             inside_naglowek: false,
             naglowek_buffer: Vec::new(),
             inside_sales: false,
@@ -70,6 +128,7 @@ impl ParserState {
             purchase_buffer: Vec::new(),
             inside_podmiot: false,
             podmiot_buffer: Vec::new(),
+            
             has_started_ewidencja: false,
             kod_urzedu,
             explicit_variant,
@@ -80,8 +139,22 @@ impl ParserState {
             
             sum_k41: 0.0, sum_k43: 0.0, sum_k44: 0.0, sum_k45: 0.0, sum_k46: 0.0, sum_k47: 0.0,
             
+            taxpayer_nip: None,
+            
             count_sales: 0,
             count_purchase: 0,
+            
+            total_sales_base: 0.0,
+            total_sales_vat: 0.0,
+            total_purchase_base: 0.0,
+            total_purchase_vat: 0.0,
+            
+            breakdown: RateBreakdown::new(),
+            
+            max_sales_vat: None,
+            min_sales_vat: None,
+            max_purchase_vat: None,
+            min_purchase_vat: None,
             
             inside_ctrl: false,
             ctrl_buffer: Vec::new(),
@@ -89,16 +162,14 @@ impl ParserState {
     }
 }
 
-pub fn process_jpk<R: BufRead, W: Write>(input: R, output: &mut W, target_namespace: Option<String>, kod_urzedu: Option<String>, explicit_variant: FormVariant, indent: bool) -> Result<()> {
+pub fn process_jpk<R: BufRead, W: Write>(
+    input: R,
+    writer: &mut Writer<W>,
+    target_namespace: Option<String>,
+    kod_urzedu: Option<String>,
+    explicit_variant: FormVariant,
+) -> Result<JpkStats> {
     let mut reader = Reader::from_reader(input);
-    reader.trim_text(indent);
-    
-    let mut writer = if indent {
-        Writer::new_with_indent(output, b' ', 2)
-    } else {
-        Writer::new(output)
-    };
-    
     let mut buf = Vec::new();
     let mut state = ParserState::new(target_namespace, kod_urzedu, explicit_variant);
 
@@ -106,19 +177,33 @@ pub fn process_jpk<R: BufRead, W: Write>(input: R, output: &mut W, target_namesp
         let event = reader.read_event_into(&mut buf)?;
         match event {
             Event::Eof => break,
-            Event::Start(ref e) => handle_start_event(e, &mut state, &mut writer)?,
-            Event::Text(ref text) => handle_text_event(text, &mut state, &mut writer)?,
-            Event::End(ref e) => handle_end_event(e, &mut state, &mut writer)?,
-            Event::Empty(ref e) => handle_empty_event(e, &mut state, &mut writer)?,
-            other => handle_other_event(other, &mut state, &mut writer)?,
+            Event::Start(ref e) => handle_start_event(e, &mut state, writer)?,
+            Event::Text(ref text) => handle_text_event(text, &mut state, writer)?,
+            Event::End(ref e) => handle_end_event(e, &mut state, writer)?,
+            Event::Empty(ref e) => handle_empty_event(e, &mut state, writer)?,
+            other => handle_other_event(other, &mut state, writer)?,
         }
     }
     
     if !state.has_checked_root {
         bail!("Error: Unrecognized format or empty file, could not find JPK root node.");
     }
-    
-    Ok(())
+
+    Ok(JpkStats {
+        original_version: state.version,
+        taxpayer_nip: state.taxpayer_nip,
+        sales_count: state.count_sales,
+        total_sales_base: state.total_sales_base,
+        total_sales_vat: state.total_sales_vat,
+        max_sales_vat: state.max_sales_vat,
+        min_sales_vat: state.min_sales_vat,
+        breakdown: state.breakdown,
+        purchase_count: state.count_purchase,
+        total_purchase_base: state.total_purchase_base,
+        total_purchase_vat: state.total_purchase_vat,
+        max_purchase_vat: state.max_purchase_vat,
+        min_purchase_vat: state.min_purchase_vat,
+    })
 }
 
 fn split_name(name: &[u8]) -> (&[u8], &[u8]) {
@@ -661,7 +746,7 @@ fn process_naglowek_buffer<W: Write>(
     Ok(())
 }
 
-fn process_podmiot_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>) -> Result<()> {
+fn process_podmiot_buffer<W: Write>(state: &mut ParserState, writer: &mut Writer<W>) -> Result<()> {
     let children = group_children(&state.podmiot_buffer);
     let active_prefix = state.target_prefix.as_deref().unwrap_or(&state.root_prefix);
     
@@ -673,8 +758,22 @@ fn process_podmiot_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>)
     let osoba_fiz_block = children.iter().find(|(n, _)| n == "OsobaFizyczna");
     let osoba_niefiz_block = children.iter().find(|(n, _)| n == "OsobaNiefizyczna");
     
+    // Capture NIP if present directly or inside person/company blocks
+    if let Some((_, block)) = children.iter().find(|(n, _)| n == "NIP") {
+        for ev in block {
+            if let Event::Text(txt) = ev { state.taxpayer_nip = Some(String::from_utf8_lossy(txt.as_ref()).trim().to_string()); }
+        }
+    }
+
     if let Some((_, block)) = osoba_fiz_block {
         let nested = group_children(block);
+        if state.taxpayer_nip.is_none() {
+            if let Some((_, b)) = nested.iter().find(|(n, _)| n == "NIP") {
+                for ev in b {
+                    if let Event::Text(txt) = ev { state.taxpayer_nip = Some(String::from_utf8_lossy(txt.as_ref()).trim().to_string()); }
+                }
+            }
+        }
         let o_tag = build_tag(active_prefix, "OsobaFizyczna");
         writer.write_event(Event::Start(BytesStart::new(&o_tag)))?;
         
@@ -691,6 +790,13 @@ fn process_podmiot_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>)
         writer.write_event(Event::End(BytesEnd::new(&o_tag)))?;
     } else if let Some((_, block)) = osoba_niefiz_block {
         let nested = group_children(block);
+        if state.taxpayer_nip.is_none() {
+            if let Some((_, b)) = nested.iter().find(|(n, _)| n == "NIP") {
+                for ev in b {
+                    if let Event::Text(txt) = ev { state.taxpayer_nip = Some(String::from_utf8_lossy(txt.as_ref()).trim().to_string()); }
+                }
+            }
+        }
         let o_tag = build_tag(active_prefix, "OsobaNiefizyczna");
         writer.write_event(Event::Start(BytesStart::new(&o_tag)))?;
         
@@ -837,6 +943,9 @@ fn process_row_buffer<W: Write>(
     
     let is_fp = doc_type_val == "FP";
 
+    let mut row_base = 0.0;
+    let mut row_vat = 0.0;
+    
     for (i, ev) in buffer.iter().enumerate() {
         if let Event::Start(e) = ev {
             let (_, name) = split_name(e.name().into_inner());
@@ -846,6 +955,43 @@ fn process_row_buffer<W: Write>(
                 if let Some(Event::Text(txt)) = buffer.get(i + 1) {
                     if let Ok(val_str) = std::str::from_utf8(txt.as_ref()) {
                         if let Ok(val) = val_str.trim().parse::<f64>() {
+                            match name_str {
+                                "K_10" | "K_11" | "K_13" | "K_15" | "K_17" | "K_19" | "K_21" | "K_23" | "K_25" | "K_27" | "K_29" | "K_31" => {
+                                    if !is_fp { 
+                                        row_base += val;
+                                        if date1_tag == b"DataWystawienia" { // Sales
+                                            match name_str {
+                                                "K_15" => state.breakdown.base_5 += val,
+                                                "K_17" => state.breakdown.base_8 += val,
+                                                "K_19" => state.breakdown.base_23 += val,
+                                                _ => state.breakdown.base_other += val,
+                                            }
+                                        }
+                                    }
+                                }
+                                "K_16" | "K_18" | "K_20" | "K_22" | "K_24" | "K_26" | "K_28" | "K_30" | "K_32" | "K_33" | "K_34" | "K_35" | "K_36" | "K_360" => {
+                                    if !is_fp {
+                                        row_vat += val;
+                                        if date1_tag == b"DataWystawienia" { // Sales
+                                            match name_str {
+                                                "K_16" => state.breakdown.vat_5 += val,
+                                                "K_18" => state.breakdown.vat_8 += val,
+                                                "K_20" => state.breakdown.vat_23 += val,
+                                                _ => state.breakdown.vat_other += val,
+                                            }
+                                        }
+                                    }
+                                }
+                                "K_40" | "K_42" => { // Purchase Base
+                                    row_base += val;
+                                }
+                                "K_41" | "K_43" | "K_44" | "K_45" | "K_46" | "K_47" => { // Purchase VAT
+                                    row_vat += val;
+                                }
+                                _ => {}
+                            }
+                            
+                            // Legacy accumulators for control sections
                             match name_str {
                                 "K_16" => if !is_fp { state.sum_k16 += val },
                                 "K_18" => if !is_fp { state.sum_k18 += val },
@@ -875,12 +1021,33 @@ fn process_row_buffer<W: Write>(
         }
     }
 
-    let use_di = doc_type_val == "WEW" || doc_type_val == "RO";
-    if date1_tag == b"DataWystawienia" {
-        state.count_sales += 1;
-    } else {
-        state.count_purchase += 1;
+    if !is_fp {
+        if date1_tag == b"DataWystawienia" { // Sales
+            state.count_sales += 1;
+            state.total_sales_base += row_base;
+            state.total_sales_vat += row_vat;
+            let count = state.count_sales;
+            if state.max_sales_vat.map_or(true, |(v, _)| row_vat > v) {
+                state.max_sales_vat = Some((row_vat, count));
+            }
+            if state.min_sales_vat.map_or(true, |(v, _)| row_vat < v) {
+                state.min_sales_vat = Some((row_vat, count));
+            }
+        } else { // Purchase
+            state.count_purchase += 1;
+            state.total_purchase_base += row_base;
+            state.total_purchase_vat += row_vat;
+            let count = state.count_purchase;
+            if state.max_purchase_vat.map_or(true, |(v, _)| row_vat > v) {
+                state.max_purchase_vat = Some((row_vat, count));
+            }
+            if state.min_purchase_vat.map_or(true, |(v, _)| row_vat < v) {
+                state.min_purchase_vat = Some((row_vat, count));
+            }
+        }
     }
+
+    let use_di = doc_type_val == "WEW" || doc_type_val == "RO";
 
     let insert_tag_name = if use_di { "DI" } else { "BFK" };
     let active_prefix = state.target_prefix.as_deref().unwrap_or(&state.root_prefix);

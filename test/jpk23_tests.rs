@@ -4,9 +4,9 @@ use std::io::Cursor;
 #[test]
 fn test_valid_root_namespace_conversion() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2021/06/08/eD/DefinicjeTypy/"></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14090/""#));
     assert!(result.contains(r#"xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/""#));
@@ -15,8 +15,8 @@ fn test_valid_root_namespace_conversion() {
 #[test]
 fn test_invalid_root_namespace_fails() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/WRONG/"></JPK>"#;
-    let mut output = Vec::new();
-    let result = process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let result = process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown);
     
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Error: Input file must be of JPK_V7 (1 or 2) type root namespace.");
@@ -25,9 +25,9 @@ fn test_invalid_root_namespace_fails() {
 #[test]
 fn test_sales_row_di_injection_wew() {
     let input = br#"<?xml version="1.0"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><SprzedazWiersz><DataWystawienia>2026</DataWystawienia><TypDokumentu>WEW</TypDokumentu></SprzedazWiersz></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     // Ensure <DI>1</DI> was injected correctly for WEW
     assert!(result.contains("<DataWystawienia>2026</DataWystawienia><DI>1</DI><TypDokumentu>WEW</TypDokumentu>"));
@@ -36,9 +36,9 @@ fn test_sales_row_di_injection_wew() {
 #[test]
 fn test_sales_row_bfk_injection_normal_invoice() {
     let input = br#"<?xml version="1.0"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><SprzedazWiersz><DataSprzedazy>2026</DataSprzedazy><TypDokumentu>VAT</TypDokumentu></SprzedazWiersz></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     // Ensure <BFK>1</BFK> was injected for a standard (non-WEW, non-RO) invoice right after Date
     assert!(result.contains("<DataSprzedazy>2026</DataSprzedazy><BFK>1</BFK><TypDokumentu>VAT</TypDokumentu>"));
@@ -47,9 +47,9 @@ fn test_sales_row_bfk_injection_normal_invoice() {
 #[test]
 fn test_purchase_row_di_injection() {
     let input = br#"<?xml version="1.0"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><ZakupWiersz><DataZakupu>2026</DataZakupu><DokumentZakupu>WEW</DokumentZakupu></ZakupWiersz></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains("<DataZakupu>2026</DataZakupu><DI>1</DI><DokumentZakupu>WEW</DokumentZakupu>"));
 }
@@ -57,9 +57,9 @@ fn test_purchase_row_di_injection() {
 #[test]
 fn test_namespace_override() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><Naglowek><KodFormularza kodSystemowy="JPK_V7M (2)">JPK_V7M</KodFormularza></Naglowek></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, Some("foo".to_string()), None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, Some("foo".to_string()), None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains("<foo:JPK"));
     assert!(result.contains(r#"xmlns:foo="http://crd.gov.pl/wzor/2025/12/19/14090/""#));
@@ -70,9 +70,9 @@ fn test_namespace_override() {
 #[test]
 fn test_namespace_strip() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><ext:JPK xmlns:ext="http://crd.gov.pl/wzor/2021/12/27/11148/"><ext:Naglowek><ext:KodFormularza kodSystemowy="JPK_V7M (2)">JPK_V7M</ext:KodFormularza></ext:Naglowek></ext:JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, Some("".to_string()), None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, Some("".to_string()), None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains("<JPK xmlns="));
     assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14090/""#));
@@ -92,9 +92,9 @@ fn test_control_total_discrepancy() {
             <PodatekNaliczony>50.00</PodatekNaliczony>
         </ZakupCtrl>
     </JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     // Sum of K_43 + K_44 is 300 + 69 = 369.00
     // But we should keep the input's 50.00 and add a comment.
@@ -107,9 +107,9 @@ fn test_control_total_discrepancy() {
 #[test]
 fn test_variant_override_k() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><Naglowek><KodFormularza>JPK_V7M</KodFormularza></Naglowek></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::K, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::K).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14089/""#));
     assert!(result.contains(r#"xsi:schemaLocation="http://crd.gov.pl/wzor/2025/12/19/14089/ JPK_V7K3.xsd""#));
@@ -121,9 +121,9 @@ fn test_variant_override_k() {
 #[test]
 fn test_v2_k_detection() {
     let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11149/"><Naglowek><KodFormularza>JPK_V7K</KodFormularza></Naglowek></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown, false).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14089/""#));
     assert!(result.contains(r#"xsi:schemaLocation="http://crd.gov.pl/wzor/2025/12/19/14089/ JPK_V7K3.xsd""#));
@@ -133,11 +133,36 @@ fn test_v2_k_detection() {
 #[test]
 fn test_xml_indentation() {
     let input = br#"<JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/"><Naglowek><KodFormularza>JPK_V7M</KodFormularza></Naglowek></JPK>"#;
-    let mut output = Vec::new();
-    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::M, true).unwrap();
-    let result = String::from_utf8(output).unwrap();
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+    process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::M).unwrap();
+    let result = String::from_utf8(writer.into_inner().into_inner()).unwrap();
     
     assert!(result.contains("\n  <Naglowek>"));
     assert!(result.contains("\n    <KodFormularza"));
 }
 
+#[test]
+fn test_summary_statistics() {
+    let input = br#"<JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/">
+        <Podmiot1><OsobaNiefizyczna><NIP>5250000000</NIP><PelnaNazwa>Test</PelnaNazwa></OsobaNiefizyczna></Podmiot1>
+        <SprzedazWiersz><K_19>100.00</K_19><K_20>23.00</K_20></SprzedazWiersz>
+        <SprzedazWiersz><K_15>200.00</K_15><K_16>10.00</K_16></SprzedazWiersz>
+        <ZakupWiersz><K_43>50.00</K_43></ZakupWiersz>
+    </JPK>"#;
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let stats = process_jpk(Cursor::new(input), &mut writer, None, None, FormVariant::Unknown).unwrap();
+    
+    assert_eq!(stats.original_version, FormVersion::V2);
+    assert_eq!(stats.taxpayer_nip, Some("5250000000".to_string()));
+    assert_eq!(stats.sales_count, 2);
+    assert_eq!(stats.total_sales_base, 300.0);
+    assert_eq!(stats.total_sales_vat, 33.0);
+    assert_eq!(stats.breakdown.base_23, 100.0);
+    assert_eq!(stats.breakdown.vat_23, 23.0);
+    assert_eq!(stats.breakdown.base_5, 200.0);
+    assert_eq!(stats.breakdown.vat_5, 10.0);
+    assert_eq!(stats.purchase_count, 1);
+    assert_eq!(stats.total_purchase_base, 0.0);
+    assert_eq!(stats.total_purchase_vat, 50.0);
+    assert_eq!(stats.max_sales_vat, Some((23.0, 1)));
+}

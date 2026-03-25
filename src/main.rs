@@ -7,6 +7,27 @@ use std::io::{self, BufRead, BufReader, Write};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn format_currency(value: f64) -> String {
+    let is_negative = value < 0.0;
+    let s = format!("{:.2}", value.abs());
+    let parts: Vec<&str> = s.split('.').collect();
+    let int_part = parts[0];
+    let frac_part = parts[1];
+
+    let mut result = String::new();
+    let mut count = 0;
+    for c in int_part.chars().rev() {
+        if count > 0 && count % 3 == 0 {
+            result.push(' ');
+        }
+        result.push(c);
+        count += 1;
+    }
+    let grouped_int: String = result.chars().rev().collect();
+    let sign = if is_negative { "-" } else { "" };
+    format!("{}{}.{}", sign, grouped_int, frac_part)
+}
+
 /// Converts JPK_V7(1) or JPK_V7(2) to JPK_V7(3) format.
 #[derive(Parser, Debug)]
 #[command(author, about, long_about = None, disable_version_flag = true)]
@@ -26,9 +47,13 @@ struct Args {
     #[arg(short = 'n', long = "namespace", value_name = "PREFIX", num_args = 0..=1, default_missing_value = "")]
     namespace: Option<String>,
 
-    /// Format the output XML with indentation (aliased to -f).
-    #[arg(short = 'f', long = "format")]
-    format: bool,
+    /// Pretty print XML output (indentation)
+    #[arg(short = 'p', long)]
+    pretty: bool,
+
+    /// Print summary at the end
+    #[arg(short = 's', long)]
+    summary: bool,
 
     /// Set the KodUrzedu (Tax Office Code) for the Naglowek (mandatory in V3).
     #[arg(short = 'u', long = "urzad", value_name = "CODE")]
@@ -67,7 +92,7 @@ fn main() -> Result<()> {
         _ => Box::new(BufReader::new(io::stdin())),
     };
 
-    let mut output_writer: Box<dyn Write> = match args.output.as_deref() {
+    let output_stream: Box<dyn Write> = match args.output.as_deref() {
         Some(path_str) if !path_str.is_empty() => {
             let path = std::path::Path::new(path_str);
             if path.exists() {
@@ -94,5 +119,59 @@ fn main() -> Result<()> {
         jpk23::FormVariant::Unknown
     };
 
-    jpk23::process_jpk(input_reader, &mut output_writer, args.namespace.clone(), args.urzad.clone(), explicit_variant, args.format)
+    let mut output_writer = if args.pretty {
+        quick_xml::Writer::new_with_indent(output_stream, b' ', 2)
+    } else {
+        quick_xml::Writer::new(output_stream)
+    };
+
+    let stats = jpk23::process_jpk(input_reader, &mut output_writer, args.namespace.clone(), args.urzad.clone(), explicit_variant)?;
+
+    if args.summary {
+        // Print summary in green
+        eprintln!("\x1b[32m");
+        eprintln!("=============================================================");
+        eprintln!("                     CONVERSION SUMMARY");
+        eprintln!("=============================================================");
+        eprintln!(" Original Version: {:?}", stats.original_version);
+        eprintln!(" Taxpayer NIP:     {}", stats.taxpayer_nip.as_deref().unwrap_or("N/A"));
+        eprintln!("-------------------------------------------------------------");
+        eprintln!(" SALES (PLN):");
+        eprintln!("   Records:        {:>41}", stats.sales_count);
+        eprintln!("   Total Net:      {:>41}", format_currency(stats.total_sales_base));
+        eprintln!("   Total VAT:      {:>41}", format_currency(stats.total_sales_vat));
+        if let Some((val, row)) = stats.max_sales_vat {
+            let row_str = format!("({:>})", row);
+            eprintln!("   Max VAT (Row):  {:>22} {:>18}", row_str, format_currency(val));
+        }
+        if let Some((val, row)) = stats.min_sales_vat {
+            let row_str = format!("({:>})", row);
+            eprintln!("   Min VAT (Row):  {:>22} {:>18}", row_str, format_currency(val));
+        }
+        eprintln!("   Rate Breakdown:                Net               VAT");
+        eprintln!("       23%         {:>22} {:>18}", format_currency(stats.breakdown.base_23), format_currency(stats.breakdown.vat_23));
+        eprintln!("        8%         {:>22} {:>18}", format_currency(stats.breakdown.base_8), format_currency(stats.breakdown.vat_8));
+        eprintln!("        5%         {:>22} {:>18}", format_currency(stats.breakdown.base_5), format_currency(stats.breakdown.vat_5));
+        eprintln!("     Other         {:>22} {:>18}", format_currency(stats.breakdown.base_other), format_currency(stats.breakdown.vat_other));
+        eprintln!("-------------------------------------------------------------");
+        eprintln!(" PURCHASES (PLN):");
+        eprintln!("   Records:        {:>41}", stats.purchase_count);
+        eprintln!("   Total Net:      {:>41}", format_currency(stats.total_purchase_base));
+        eprintln!("   Total VAT:      {:>41}", format_currency(stats.total_purchase_vat));
+        if let Some((val, row)) = stats.max_purchase_vat {
+            let row_str = format!("({:>})", row);
+            eprintln!("   Max VAT (Row):  {:>22} {:>18}", row_str, format_currency(val));
+        }
+        if let Some((val, row)) = stats.min_purchase_vat {
+            let row_str = format!("({:>})", row);
+            eprintln!("   Min VAT (Row):  {:>22} {:>18}", row_str, format_currency(val));
+        }
+        eprintln!("-------------------------------------------------------------");
+        let diff = stats.total_sales_vat - stats.total_purchase_vat;
+        eprintln!(" FINAL VAT BALANCE (PLN): {:>34}", format_currency(diff));
+        eprintln!("=============================================================");
+        eprintln!("\x1b[0m");
+    }
+
+    Ok(())
 }
