@@ -82,7 +82,7 @@ fn test_namespace_strip() {
 }
 
 #[test]
-fn test_control_total_correction() {
+fn test_control_total_discrepancy() {
     let input = br#"<?xml version="1.0"?>
     <JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11148/">
         <ZakupWiersz><K_43>100.00</K_43><K_44>23.00</K_44></ZakupWiersz>
@@ -96,10 +96,13 @@ fn test_control_total_correction() {
     process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown).unwrap();
     let result = String::from_utf8(output).unwrap();
     
-    // Sum of K_43 + K_44 is 300 + 69 = 369
+    // Sum of K_43 + K_44 is 300 + 69 = 369.00
+    // But we should keep the input's 50.00 and add a comment.
     assert!(result.contains("<LiczbaWierszyZakupow>2</LiczbaWierszyZakupow>"));
-    assert!(result.contains("<PodatekNaliczony>369.00</PodatekNaliczony>"));
+    assert!(result.contains("<PodatekNaliczony>50.00</PodatekNaliczony>"));
+    assert!(result.contains("<!-- Warning: Control total discrepancy in ZakupCtrl/PodatekNaliczony is 50.00 (calculated 369.00) -->"));
 }
+
 
 #[test]
 fn test_variant_override_k() {

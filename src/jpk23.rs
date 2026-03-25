@@ -968,13 +968,18 @@ fn process_ctrl_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>) ->
             }
             
             let total_str = format!("{:.2}", calculated_total);
+            let mut final_val = total_str.clone();
+            
             if !old_val.is_empty() && old_val != total_str && old_val != format!("{:.1}", calculated_total) {
-                eprintln!("Warning: Corrected SprzedazCtrl/PodatekNalezny from {} to {}", old_val, total_str);
+                let msg = format!("Warning: Control total discrepancy in SprzedazCtrl/PodatekNalezny is {} (calculated {})", old_val, total_str);
+                eprintln!("{}", msg);
+                writer.write_event(Event::Comment(BytesText::new(&format!(" {} ", msg))))?;
+                final_val = old_val;
             }
             
             let tot_tag = build_tag(active_prefix, "PodatekNalezny");
             writer.write_event(Event::Start(BytesStart::new(&tot_tag)))?;
-            writer.write_event(Event::Text(BytesText::new(&total_str)))?;
+            writer.write_event(Event::Text(BytesText::new(&final_val)))?;
             writer.write_event(Event::End(BytesEnd::new(&tot_tag)))?;
         } else if local == b"ZakupCtrl" {
             // Count
@@ -994,13 +999,18 @@ fn process_ctrl_buffer<W: Write>(state: &ParserState, writer: &mut Writer<W>) ->
             }
             
             let total_str = format!("{:.2}", calculated_total);
+            let mut final_val = total_str.clone();
+            
             if !old_val.is_empty() && old_val != total_str && old_val != format!("{:.1}", calculated_total) {
-                eprintln!("Warning: Corrected ZakupCtrl/PodatekNaliczony from {} to {}", old_val, total_str);
+                let msg = format!("Warning: Control total discrepancy in ZakupCtrl/PodatekNaliczony is {} (calculated {})", old_val, total_str);
+                eprintln!("{}", msg);
+                writer.write_event(Event::Comment(BytesText::new(&format!(" {} ", msg))))?;
+                final_val = old_val;
             }
             
             let tot_tag = build_tag(active_prefix, "PodatekNaliczony");
             writer.write_event(Event::Start(BytesStart::new(&tot_tag)))?;
-            writer.write_event(Event::Text(BytesText::new(&total_str)))?;
+            writer.write_event(Event::Text(BytesText::new(&final_val)))?;
             writer.write_event(Event::End(BytesEnd::new(&tot_tag)))?;
         }
         
