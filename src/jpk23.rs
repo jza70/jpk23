@@ -230,14 +230,25 @@ fn handle_start_event<W: Write>(
     if !state.has_checked_root && local_name == b"JPK" {
         state.has_checked_root = true;
         state.root_prefix = prefix.to_vec();
+        
+        // If explicit variant was provided via CLI, use it immediately
+        if state.explicit_variant != FormVariant::Unknown {
+            state.variant = state.explicit_variant;
+        }
+
         for attr in e.attributes().flatten() {
             let k = attr.key.into_inner();
             let is_default = k == b"xmlns";
             let is_prefix = !prefix.is_empty() && k.starts_with(b"xmlns:") && &k[6..] == prefix;
             if is_default || is_prefix {
-                if attr.value.as_ref() == b"http://crd.gov.pl/wzor/2021/12/27/11148/" {
+                let val = attr.value.as_ref();
+                if val == b"http://crd.gov.pl/wzor/2021/12/27/11148/" {
                     state.version = FormVersion::V2;
-                } else if attr.value.as_ref() == b"http://jpk.mf.gov.pl/wzor/2017/11/13/1113/" {
+                    if state.variant == FormVariant::Unknown { state.variant = FormVariant::M; }
+                } else if val == b"http://crd.gov.pl/wzor/2021/12/27/11149/" {
+                    state.version = FormVersion::V2;
+                    if state.variant == FormVariant::Unknown { state.variant = FormVariant::K; }
+                } else if val == b"http://jpk.mf.gov.pl/wzor/2017/11/13/1113/" {
                     state.version = FormVersion::V1;
                 }
             }
@@ -246,8 +257,23 @@ fn handle_start_event<W: Write>(
             bail!("Error: Input file must be of JPK_V7 (1 or 2) type root namespace.");
         }
         
+        // If still unknown (V1 or weird V2), default to M for now (will be updated in Naglowek if V1)
+        // But the user says "when we convert with -k" so we should trust state.variant if set.
+        if state.variant == FormVariant::Unknown {
+            state.variant = FormVariant::M;
+        }
+
         let mut e_owned = e.clone().into_owned();
         e_owned.clear_attributes();
+        
+        let ns_m = "http://crd.gov.pl/wzor/2025/12/19/14090/";
+        let ns_k = "http://crd.gov.pl/wzor/2025/12/19/14089/";
+        let (ns, schema) = if state.variant == FormVariant::K {
+            (ns_k, format!("{} JPK_V7K3.xsd", ns_k))
+        } else {
+            (ns_m, format!("{} JPK_V7M3.xsd", ns_m))
+        };
+
         for attr in e.attributes().flatten() {
             let k = attr.key.into_inner();
             let is_default = k == b"xmlns";
@@ -256,20 +282,26 @@ fn handle_start_event<W: Write>(
             if is_default || is_prefix {
                 let active_prefix = state.target_prefix.as_deref().unwrap_or(&state.root_prefix);
                 if active_prefix.is_empty() {
-                    e_owned.push_attribute(("xmlns", "http://crd.gov.pl/wzor/2025/12/19/14090/"));
+                    e_owned.push_attribute(("xmlns", ns));
                 } else {
                     let p_str = std::str::from_utf8(active_prefix).unwrap_or("");
                     let key_str = format!("xmlns:{}", p_str);
-                    e_owned.push_attribute((key_str.as_str(), "http://crd.gov.pl/wzor/2025/12/19/14090/"));
+                    e_owned.push_attribute((key_str.as_str(), ns));
                 }
             } else if k == b"xmlns:etd" {
                 e_owned.push_attribute(("xmlns:etd", "http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/"));
             } else if k == b"xmlns:tns" {
                 // remove tns entirely as it's legacy V1
+            } else if k == b"xmlns:xsi" || k == b"xsi:schemaLocation" {
+                // skip to re-add correctly
             } else {
                 e_owned.push_attribute(attr);
             }
         }
+        
+        e_owned.push_attribute(("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance"));
+        e_owned.push_attribute(("xsi:schemaLocation", schema.as_str()));
+
         write_start(writer, &e_owned, state)?;
         return Ok(());
     }
@@ -564,6 +596,25 @@ fn process_naglowek_buffer<W: Write>(
     for expected in ordered_names {
         if let Some((_, block)) = children.iter().find(|(n, _)| n == expected) {
             write_block_mapped(writer, block, state, expected)?;
+            written_names.insert(expected);
+        } else if expected == "KodFormularza" {
+            let kf_tag = build_tag(active_prefix, "KodFormularza");
+            let mut e_kf = BytesStart::new(&kf_tag);
+            if state.variant == FormVariant::K {
+                e_kf.push_attribute(("kodSystemowy", "JPK_V7K (3)"));
+            } else {
+                e_kf.push_attribute(("kodSystemowy", "JPK_V7M (3)"));
+            }
+            e_kf.push_attribute(("wersjaSchemy", "1-0E"));
+            writer.write_event(Event::Start(e_kf))?;
+            writer.write_event(Event::Text(BytesText::new("JPK_VAT")))?;
+            writer.write_event(Event::End(BytesEnd::new(&kf_tag)))?;
+            written_names.insert(expected);
+        } else if expected == "WariantFormularza" {
+            let wf_tag = build_tag(active_prefix, "WariantFormularza");
+            writer.write_event(Event::Start(BytesStart::new(&wf_tag)))?;
+            writer.write_event(Event::Text(BytesText::new("3")))?;
+            writer.write_event(Event::End(BytesEnd::new(&wf_tag)))?;
             written_names.insert(expected);
         } else if expected == "KodUrzedu" {
             // Priority: CLI arg > Input file

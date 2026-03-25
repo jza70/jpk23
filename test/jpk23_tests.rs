@@ -108,5 +108,22 @@ fn test_variant_override_k() {
     process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::K).unwrap();
     let result = String::from_utf8(output).unwrap();
     
+    assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14089/""#));
+    assert!(result.contains(r#"xsi:schemaLocation="http://crd.gov.pl/wzor/2025/12/19/14089/ JPK_V7K3.xsd""#));
+    assert!(result.contains(r#"kodSystemowy="JPK_V7K (3)""#));
+    assert!(result.contains(r#"wersjaSchemy="1-0E""#));
+    assert!(result.contains("<WariantFormularza>3</WariantFormularza>"));
+}
+
+#[test]
+fn test_v2_k_detection() {
+    let input = br#"<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="http://crd.gov.pl/wzor/2021/12/27/11149/"><Naglowek><KodFormularza>JPK_V7K</KodFormularza></Naglowek></JPK>"#;
+    let mut output = Vec::new();
+    process_jpk(Cursor::new(input), &mut output, None, None, FormVariant::Unknown).unwrap();
+    let result = String::from_utf8(output).unwrap();
+    
+    assert!(result.contains(r#"xmlns="http://crd.gov.pl/wzor/2025/12/19/14089/""#));
+    assert!(result.contains(r#"xsi:schemaLocation="http://crd.gov.pl/wzor/2025/12/19/14089/ JPK_V7K3.xsd""#));
     assert!(result.contains(r#"kodSystemowy="JPK_V7K (3)""#));
 }
+
